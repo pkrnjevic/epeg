@@ -46,6 +46,7 @@ struct _Epeg_Image
       char                          *comment;
       FILE                          *f;
       J_COLOR_SPACE                  color_space;
+      int                            orientation;  /* Exif orientation values 0-8 */
       struct jpeg_decompress_struct  jinfo;
       struct {
 	 char                       *uri;

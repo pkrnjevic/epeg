@@ -802,6 +802,8 @@ _epeg_open_header(Epeg_Image *im)
    
    jpeg_create_decompress(&(im->in.jinfo));
    jpeg_save_markers(&(im->in.jinfo), JPEG_APP0 + 7, 1024);
+   /* Save Exif markers */
+   jpeg_save_markers(&(im->in.jinfo), JPEG_APP0 + 1, 65535);
    jpeg_save_markers(&(im->in.jinfo), JPEG_COM,      65535);
    if (im->in.f != NULL)
      {
@@ -878,8 +880,32 @@ _epeg_open_header(Epeg_Image *im)
 		    }
 	       }
 	  }
-     }
-   return im;
+	else if (m->marker == (JPEG_APP0 + 1))
+	{
+	    /*
+	    *	This really ugly code will scan to find an Exif Orientation tag
+	    *	then assign that value to im->in.orientation. Later, this will
+	    *	be written to the output jpeg.
+	    */
+	    static unsigned char tagOrientation[] = {
+	        0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01,
+	        /* 0x00, 0x01, 0x00, 0x00 */
+	    };
+
+     	    unsigned char *p = m->data + 6;
+	    if ((m->data_length > 4) &&
+		    (!strncmp((char *)m->data, "Exif", 4)) &&
+		    (!strncmp(p, "MM", 2))) {
+	     	for (p = m->data; p < &m->data[m->data_length - 12]; p++) {
+	     	    if (0 == memcmp(p,tagOrientation,sizeof(tagOrientation))) {
+		   	im->in.orientation = p[9];
+		     	break;
+	     	    }
+	     	}
+	    }
+     	}
+	return im;
+    }
 }
 
 /**
@@ -1122,6 +1148,34 @@ struct epeg_destination_mgr
    unsigned char *buf;
 };
 
+// Name										Value 						Start	Size
+// struct APP1 app1														14h		24h
+// 	enum M_ID marker						M_APP1 (FFE1h)				14h		2h	
+// 	WORD szSection							34							16h		2h	
+// 	char EXIF[6]							Exif						18h		6h	
+// 	byte align[2]							II							1Eh		2h	
+// 	WORD tagMark							42							20h		2h	
+// 	DWORD offsetFirstIFD					8							22h		4h	
+// 	struct IFD ifdMainImage												26h		12h	
+// 		WORD nDirEntry						1							26h		2h	
+// 		struct DIRENTRY dirEntry			Tag# = 0x112 (Orientation)	28h		Ch	
+// 			enum ExifTag tagNumber			Orientation (274)			28h		2h	
+// 			enum DataFormat dataFormat		uShort (3)					2Ah		2h	
+// 			DWORD nComponent				1							2Ch		4h	
+// 			ushort usValue					6							30h		2h	
+// 			uchar padding[2]											32h		2h	
+// 		DWORD nextIFDoffset					0							34h		4h	
+
+static unsigned char exifData[32] = {
+	// Dropped M_ID and section (created by jpeg_write_marker)
+	// Now start with "Exif"
+    0x45, 0x78, 0x69, 0x66,
+    0x00, 0x00, 0x49, 0x49, 0x2A, 0x00, 0x08, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x12, 0x01, 0x03, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00 
+};
+
 static int
 _epeg_encode(Epeg_Image *im)
 {
@@ -1199,6 +1253,10 @@ _epeg_encode(Epeg_Image *im)
 	im->out.jinfo.comp_info[2].v_samp_factor = 1;
      }
    jpeg_start_compress(&(im->out.jinfo), TRUE);
+
+   /* Output Exif orientation */
+   exifData[24] = im->in.orientation;
+   jpeg_write_marker(&(im->out.jinfo), JPEG_APP0 + 1, exifData, sizeof(exifData));
 
    if (im->out.comment)
      jpeg_write_marker(&(im->out.jinfo), JPEG_COM, im->out.comment, strlen(im->out.comment));
@@ -1360,3 +1418,4 @@ METHODDEF(void)
 _format_message(j_common_ptr cinfo, char * buffer)
 {
 }
+
