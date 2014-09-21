@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <setjmp.h>
 #include <jpeglib.h>
+#include <libexif/exif-data.h>
 
 #include "config.h"
 
@@ -29,13 +30,13 @@ struct _Epeg_Image
    struct stat                     stat_info;
    unsigned char                  *pixels;
    unsigned char                 **lines;
-   
+
    char                            scaled : 1;
-   
+
    int                             error;
-   
+
    Epeg_Colorspace                 color_space;
-   
+
    struct {
       char                          *file;
       struct {
@@ -80,7 +81,7 @@ METHODDEF(void) _jpeg_term_source(j_decompress_ptr cinfo);
 METHODDEF(void) _jpeg_init_destination(j_compress_ptr cinfo);
 METHODDEF(boolean) _jpeg_empty_output_buffer (j_compress_ptr cinfo);
 METHODDEF(void) _jpeg_term_destination (j_compress_ptr cinfo);
-    
+
 METHODDEF(void) _emit_message (j_common_ptr cinfo, int msg_level);
 METHODDEF(void) _output_message (j_common_ptr cinfo);
 METHODDEF(void) _format_message (j_common_ptr cinfo, char * buffer);

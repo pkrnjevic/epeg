@@ -11,42 +11,41 @@ static int           _epeg_encode              (Epeg_Image *im);
 
 static void          _epeg_fatal_error_handler (j_common_ptr cinfo);
 
-#define MIN(__x,__y) ((__x) < (__y) ? (__x) : (__y))
-#define MAX(__x,__y) ((__x) > (__y) ? (__x) : (__y))
-
 static const JOCTET fake_EOI[2] = { 0xFF, JPEG_EOI };
+
+static ExifByteOrder exif_byte_order = EXIF_BYTE_ORDER_INTEL;
 
 /**
  * Open a JPEG image by filename.
  * @param file The file path to open.
  * @return A handle to the opened JPEG file, with the header decoded.
- * 
+ *
  * This function opens the file indicated by the @p file parameter, and
  * attempts to decode it as a jpeg file. If this failes, NULL is returned.
  * Otherwise a valid handle to an open JPEG file is returned that can be used
  * by other Epeg calls.
- * 
+ *
  * The @p file must be a pointer to a valid C string, NUL (0 byte) terminated
  * thats is a relative or absolute file path. If not results are not
  * determined.
- * 
+ *
  * See also: epeg_memory_open(), epeg_close()
  */
 EAPI Epeg_Image *
 epeg_file_open(const char *file)
 {
    Epeg_Image *im;
-   
+
    im = calloc(1, sizeof(Epeg_Image));
    if (!im) return NULL;
-   
+
    im->in.file = strdup(file);
    if (!im->in.file)
      {
 	free(im);
 	return NULL;
      }
-   
+
    im->in.f = fopen(im->in.file, "rb");
    if (!im->in.f)
      {
@@ -63,21 +62,21 @@ epeg_file_open(const char *file)
  * @param data A pointer to the memory containing the JPEG data.
  * @param size The size of the memory segment containing the JPEG.
  * @return  A handle to the opened JPEG, with the header decoded.
- * 
+ *
  * This function opens a JPEG file that is stored in memory pointed to by
  * @p data, and that is @p size bytes in size. If successful a valid handle
  * is returned, or on failure NULL is returned.
- * 
+ *
  * See also: epeg_file_open(), epeg_close()
  */
 EAPI EAPI Epeg_Image *
 epeg_memory_open(unsigned char *data, int size)
 {
    Epeg_Image *im;
-   
+
    im = calloc(1, sizeof(Epeg_Image));
    if (!im) return NULL;
-   
+
    im->out.quality = 75;
    im->in.mem.data = (unsigned char **)data;
    im->in.mem.size = size;
@@ -92,9 +91,9 @@ epeg_memory_open(unsigned char *data, int size)
  * @param im A handle to an opened Epeg image.
  * @param w A pointer to the width value in pixels to be filled in.
  * @param h A pointer to the height value in pixels to be filled in.
- * 
+ *
  * Returns the image size in pixels.
- * 
+ *
  */
 EAPI void
 epeg_size_get(Epeg_Image *im, int *w, int *h)
@@ -107,9 +106,9 @@ epeg_size_get(Epeg_Image *im, int *w, int *h)
  * Return the original JPEG pixel color space.
  * @param im A handle to an opened Epeg image.
  * @param space A pointer to the color space value to be filled in.
- * 
+ *
  * Returns the image color space.
- * 
+ *
  */
 EAPI void
 epeg_colorspace_get(Epeg_Image *im, int *space)
@@ -122,10 +121,10 @@ epeg_colorspace_get(Epeg_Image *im, int *space)
  * @param im A handle to an opened Epeg image.
  * @param w The width of the image to decode at, in pixels.
  * @param h The height of the image to decode at, in pixels.
- * 
+ *
  * Sets the size at which to deocode the JPEG image, giving an optimised load
  * that only decodes the pixels needed.
- * 
+ *
  */
 EAPI void
 epeg_decode_size_set(Epeg_Image *im, int w, int h)
@@ -161,7 +160,7 @@ epeg_decode_bounds_set(Epeg_Image *im, int x, int y, int w, int h)
  * Set the colorspace in which to decode the image.
  * @param im A handle to an opened Epeg image.
  * @param colorspace The colorspace to decode the image in.
- * 
+ *
  * This sets the colorspace to decode the image in. The default is EPEG_YUV8,
  * as this is normally the native colorspace of a JPEG file, avoiding any
  * colorspace conversions for a faster load and/or save.
@@ -182,33 +181,33 @@ epeg_decode_colorspace_set(Epeg_Image *im, Epeg_Colorspace colorspace)
  * @param w Rectangle width.
  * @param h Rectangle height.
  * @return Pointer to the top left of the requested pixel block.
- * 
+ *
  * Return image pixels in the decoded format from the specified location
  * rectangle bounded with the box @p x, @p y @p w X @p y. The pixel block is
  * packed with no row padding, and it organsied from top-left to bottom right,
  * row by row. You must free the pixel block using epeg_pixels_free() before
  * you close the image handle, and assume the pixels to be read-only memory.
- * 
+ *
  * On success the pointer is returned, on failure, NULL is returned. Failure
  * may be because the rectangle is out of the bounds of the image, memory
  * allocations failed or the image data cannot be decoded.
- * 
+ *
  */
 EAPI const void *
 epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
 {
    int xx, yy, ww, hh, bpp, ox, oy, ow, oh, iw, ih;
-   
+
    if (!im->pixels)
      {
 	if (_epeg_decode(im) != 0) return NULL;
      }
-   
+
    if (!im->pixels) return NULL;
    if ((im->out.w < 1) || (im->out.h < 1)) return NULL;
-   
+
    if (_epeg_scale(im) != 0) return NULL;
-   
+
    bpp = im->in.jinfo.output_components;
    iw = im->out.w;
    ih = im->out.h;
@@ -239,13 +238,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    if (im->color_space == EPEG_GRAY8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 1);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox));
 	     for (xx = x + ox; xx < ww; xx++)
@@ -260,13 +259,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_YUV8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -283,13 +282,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_RGB8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -306,13 +305,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_BGR8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -329,13 +328,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_RGBA8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 4);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 4);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -353,13 +352,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_BGRA8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 4);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 4);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -377,13 +376,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_ARGB32)
      {
 	unsigned int *pix, *p;
-	
+
 	pix = malloc(w * h * 4);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox));
 	     for (xx = x + ox; xx < ww; xx++)
@@ -398,13 +397,13 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
    else if (im->color_space == EPEG_CMYK)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 4);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 4);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -430,31 +429,31 @@ epeg_pixels_get(Epeg_Image *im, int x, int y,  int w, int h)
  * @param w Rectangle width.
  * @param h Rectangle height.
  * @return Pointer to the top left of the requested pixel block.
- * 
+ *
  * Return image pixels in the decoded format from the specified location
  * rectangle bounded with the box @p x, @p y @p w X @p y. The pixel block is
  * packed with no row padding, and it organsied from top-left to bottom right,
  * row by row. You must free the pixel block using epeg_pixels_free() before
  * you close the image handle, and assume the pixels to be read-only memory.
- * 
+ *
  * On success the pointer is returned, on failure, NULL is returned. Failure
  * may be because the rectangle is out of the bounds of the image, memory
  * allocations failed or the image data cannot be decoded.
- * 
+ *
  */
 EAPI const void *
 epeg_pixels_get_as_RGB8(Epeg_Image *im, int x, int y,  int w, int h)
 {
    int xx, yy, ww, hh, bpp, ox, oy, ow, oh, iw, ih;
-   
+
    if (!im->pixels)
      {
 	if (_epeg_decode(im) != 0) return NULL;
      }
-	
+
    if (!im->pixels) return NULL;
    if ((im->out.w < 1) || (im->out.h < 1)) return NULL;
-   
+
    bpp = im->in.jinfo.output_components;
    iw = im->out.w;
    ih = im->out.h;
@@ -478,20 +477,20 @@ epeg_pixels_get_as_RGB8(Epeg_Image *im, int x, int y,  int w, int h)
      }
    if (ow < 1) return NULL;
    if (oh < 1) return NULL;
-   
+
    ww = x + ox + ow;
    hh = y + oy + oh;
-   
+
    if (im->color_space == EPEG_GRAY8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -508,13 +507,13 @@ epeg_pixels_get_as_RGB8(Epeg_Image *im, int x, int y,  int w, int h)
    if (im->color_space == EPEG_RGB8)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -531,13 +530,13 @@ epeg_pixels_get_as_RGB8(Epeg_Image *im, int x, int y,  int w, int h)
    if (im->color_space == EPEG_CMYK)
      {
 	unsigned char *pix, *p;
-	
+
 	pix = malloc(w * h * 3);
 	if (!pix) return NULL;
 	for (yy = y + oy; yy < hh; yy++)
 	  {
 	     unsigned char *s;
-	     
+
 	     s = im->lines[yy] + ((x + ox) * bpp);
 	     p = pix + ((((yy - y) * w) + ox) * 3);
 	     for (xx = x + ox; xx < ww; xx++)
@@ -558,7 +557,7 @@ epeg_pixels_get_as_RGB8(Epeg_Image *im, int x, int y,  int w, int h)
  * Free requested pixel block from an image.
  * @param im A handle to an opened Epeg image.
  * @param data The pointer to the image pixels.
- * 
+ *
  * This frees the data for a block of pixels requested from image @p im.
  * @p data must be a valid (non NULL) pointer to a pixel block taken from the
  * image @p im by epeg_pixels_get() and mustbe called before the image is
@@ -574,11 +573,11 @@ epeg_pixels_free(Epeg_Image *im, const void *data)
  * Get the image comment field as a string.
  * @param im A handle to an opened Epeg image.
  * @return A pointer to the loaded image comments.
- * 
+ *
  * This function returns the comment field as a string (NUL byte terminated)
  * of the loaded image @p im, if there is a comment, or NULL if no comment is
  * saved with the image. Consider the string returned to be read-only.
- * 
+ *
  */
 EAPI const char *
 epeg_comment_get(Epeg_Image *im)
@@ -590,11 +589,11 @@ epeg_comment_get(Epeg_Image *im)
  * Get thumbnail comments of loaded image.
  * @param im A handle to an opened Epeg image.
  * @param info Pointer to a thumbnail info struct to be filled in.
- * 
+ *
  * This function retrieves thumbnail comments written by Epeg to any saved
  * JPEG files. If no thumbnail comments were saved, the fields will be 0 in
  * the @p info struct on return.
- * 
+ *
  */
 EAPI void
 epeg_thumbnail_comments_get(Epeg_Image *im, Epeg_Thumbnail_Info *info)
@@ -611,13 +610,13 @@ epeg_thumbnail_comments_get(Epeg_Image *im, Epeg_Thumbnail_Info *info)
  * Set the comment field of the image for saving.
  * @param im A handle to an opened Epeg image.
  * @param comment The comment to set.
- * 
+ *
  * Set the comment for the image file for when it gets saved. This is a NUL
  * byte terminated C string. If @p comment is NULL the output file will have
  * no comment field.
- * 
+ *
  * The default comment will be any comment loaded from the input file.
- * 
+ *
  */
 EAPI void
 epeg_comment_set(Epeg_Image *im, const char *comment)
@@ -631,14 +630,14 @@ epeg_comment_set(Epeg_Image *im, const char *comment)
  * Set the encoding quality of the saved image.
  * @param im A handle to an opened Epeg image.
  * @param quality The quality of encoding from 0 to 100.
- * 
+ *
  * Set the quality of the output encoded image. Values from 0 to 100
  * inclusive are valid, with 100 being the maximum quality, and 0 being the
  * minimum. If the quality is set equal to or above 90%, the output U and V
  * color planes are encoded at 1:1 with the Y plane.
- * 
+ *
  * The default quality is 75.
- * 
+ *
  */
 EAPI void
 epeg_quality_set(Epeg_Image *im, int quality)
@@ -652,10 +651,10 @@ epeg_quality_set(Epeg_Image *im, int quality)
  * Enable thumbnail comments in saved image.
  * @param im A handle to an opened Epeg image.
  * @param onoff A boolean on and off enabling flag.
- * 
+ *
  * if @p onoff is 1, the output file will have thumbnail comments added to
  * it, and if it is 0, it will not. The default is 0.
- * 
+ *
  */
 EAPI void
 epeg_thumbnail_comments_enable(Epeg_Image *im, int onoff)
@@ -667,7 +666,7 @@ epeg_thumbnail_comments_enable(Epeg_Image *im, int onoff)
  * Set the output file path for the image when saved.
  * @param im A handle to an opened Epeg image.
  * @param file The path to the output file.
- * 
+ *
  * This sets the output file path name (either a full or relative path name)
  * to where the file will be written when saved. @p file must be a NUL
  * terminated C string conatining the path to the file to be saved to. If it is
@@ -686,14 +685,14 @@ epeg_file_output_set(Epeg_Image *im, const char *file)
  * @param im A handle to an opened Epeg image.
  * @param data A pointer to a pointer to a memory block.
  * @param size A pointer to a counter of the size of the memory block.
- * 
+ *
  * This sets the output encoding of the image when saved to be allocated
  * memory. After epeg_close() is called the pointer pointed to by @p data
  * and the integer pointed to by @p size will contain the pointer to the
  * memory block and its size in bytes, respecitvely. The memory block can be
  * freed with the free() function call. If the save fails the pointer to the
  * memory block will be unaffected, as will the size.
- * 
+ *
  */
 EAPI void
 epeg_memory_output_set(Epeg_Image *im, unsigned char **data, int *size)
@@ -706,7 +705,7 @@ epeg_memory_output_set(Epeg_Image *im, unsigned char **data, int *size)
 /**
  * This saves the image to its specified destination.
  * @param im A handle to an opened Epeg image.
- * 
+ *
  * This saves the image @p im to its destination specified by
  * epeg_file_output_set() or epeg_memory_output_set(). The image will be
  * encoded at the deoded pixel size, using the quality, comment and thumbnail
@@ -733,7 +732,7 @@ epeg_encode(Epeg_Image *im)
 /**
  * FIXME: Document this
  * @param im A handle to an opened Epeg image.
- * 
+ *
  * FIXME: Document this.
  */
 EAPI int
@@ -751,7 +750,7 @@ epeg_trim(Epeg_Image *im)
 /**
  * Close an image handle.
  * @param im A handle to an opened Epeg image.
- * 
+ *
  * This closes an opened image handle and frees all memory associated with it.
  * It does not free encoded data generated by epeg_memory_output_set() followed
  * by epeg_encode() nor does it guarantee to free any data recieved by
@@ -791,7 +790,7 @@ _epeg_open_header(Epeg_Image *im)
    im->jerr.pub.output_message = _output_message;
    im->jerr.pub.format_message = _format_message;
 #endif
-   
+
    if (setjmp(im->jerr.setjmp_buffer))
      {
 	error:
@@ -799,7 +798,7 @@ _epeg_open_header(Epeg_Image *im)
 	im = NULL;
 	return NULL;
      }
-   
+
    jpeg_create_decompress(&(im->in.jinfo));
    jpeg_save_markers(&(im->in.jinfo), JPEG_APP0 + 7, 1024);
    /* Save Exif markers */
@@ -829,13 +828,13 @@ _epeg_open_header(Epeg_Image *im)
    im->in.h = im->in.jinfo.image_height;
    if (im->in.w < 1) goto error;
    if (im->in.h < 1) goto error;
-   
+
    im->out.w = im->in.w;
    im->out.h = im->in.h;
 
    im->color_space = ((im->in.color_space = im->in.jinfo.out_color_space) == JCS_GRAYSCALE) ? EPEG_GRAY8 : EPEG_RGB8;
    if (im->in.color_space == JCS_CMYK) im->color_space = EPEG_CMYK;
-   
+
    for (m = im->in.jinfo.marker_list; m; m = m->next)
      {
 	if (m->marker == JPEG_COM)
@@ -854,7 +853,7 @@ _epeg_open_header(Epeg_Image *im)
 		 (!strncmp((char *)m->data, "Thumb::", 7)))
 	       {
 		  char *p, *p2;
-		  
+
 		  p = malloc(m->data_length + 1);
 		  if (p)
 		    {
@@ -883,27 +882,23 @@ _epeg_open_header(Epeg_Image *im)
 	else if (m->marker == (JPEG_APP0 + 1))
 	{
 	    /*
-	    *	This really ugly code will scan to find an Exif Orientation tag
-	    *	then assign that value to im->in.orientation. Later, this will
-	    *	be written to the output jpeg.
+	    *	Look for an Exif Orientation tag. If found,
+	    *	store it in im->in.orientation. Later, this will
+	    *	be written to the output jpeg Exif data.
 	    */
-	    static unsigned char tagOrientation[] = {
-	        0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01,
-	        /* 0x00, 0x01, 0x00, 0x00 */
-	    };
-
-     	    unsigned char *p = m->data + 6;
-	    if ((m->data_length > 4) &&
-		    (!strncmp((char *)m->data, "Exif", 4)) &&
-		    (!strncmp(p, "MM", 2))) {
-	     	for (p = m->data; p < &m->data[m->data_length - 12]; p++) {
-	     	    if (0 == memcmp(p,tagOrientation,sizeof(tagOrientation))) {
-		   	im->in.orientation = p[9];
-		     	break;
-	     	    }
-	     	}
-	    }
-     	}
+            im->in.orientation = 0;
+            ExifData *ed = exif_data_new_from_data(m->data, m->data_length);
+            if (ed) {
+             	exif_byte_order = exif_data_get_byte_order(ed);
+             	ExifEntry *entry = exif_content_get_entry(ed->ifd[EXIF_IFD_0],EXIF_TAG_ORIENTATION);
+                if (entry) {
+                    im->in.orientation = exif_get_short(entry->data, exif_byte_order);
+                    exif_entry_unref(entry);
+                }
+            }
+            // Should be able to release ed using unref, but this causes segfault. libexif bug?
+            // exif_data_unref(ed);
+        }
 	return im;
     }
 }
@@ -917,19 +912,19 @@ _epeg_decode(Epeg_Image *im)
 {
    int scale, scalew, scaleh, y;
    JDIMENSION old_output_scanline = 1;
-   
+
    if (im->pixels) return 1;
    if ((im->out.w < 1) || (im->out.h < 1)) return 1;
-   
+
    scalew = im->in.w / im->out.w;
    scaleh = im->in.h / im->out.h;
-   
-   scale = scalew;   
+
+   scale = scalew;
    if (scaleh < scalew) scale = scaleh;
 
    if      (scale > 8) scale = 8;
    else if (scale < 1) scale = 1;
-   
+
    im->in.jinfo.scale_num           = 1;
    im->in.jinfo.scale_denom         = scale;
    im->in.jinfo.do_fancy_upsampling = FALSE;
@@ -942,11 +937,11 @@ _epeg_decode(Epeg_Image *im)
 	im->in.jinfo.out_color_space = JCS_GRAYSCALE;
 	im->in.jinfo.output_components = 1;
 	break;
-		
+
       case EPEG_YUV8:
 	im->in.jinfo.out_color_space = JCS_YCbCr;
 	break;
-		
+
       case EPEG_RGB8:
       case EPEG_BGR8:
       case EPEG_RGBA8:
@@ -954,16 +949,16 @@ _epeg_decode(Epeg_Image *im)
       case EPEG_ARGB32:
 	im->in.jinfo.out_color_space = JCS_RGB;
 	break;
-		
+
       case EPEG_CMYK:
 	im->in.jinfo.out_color_space = JCS_CMYK;
 	im->in.jinfo.output_components = 4;
 	break;
-	
+
       default:
 	break;
      }
-   
+
    im->out.jinfo.err			= jpeg_std_error(&(im->jerr.pub));
    im->jerr.pub.error_exit		= _epeg_fatal_error_handler;
 #ifdef NOWARNINGS
@@ -976,10 +971,10 @@ _epeg_decode(Epeg_Image *im)
      return 2;
 
    jpeg_calc_output_dimensions(&(im->in.jinfo));
-   
+
    im->pixels = malloc(im->in.jinfo.output_width * im->in.jinfo.output_height * im->in.jinfo.output_components);
    if (!im->pixels) return 1;
-	
+
    im->lines = malloc(im->in.jinfo.output_height * sizeof(char *));
    if (!im->lines)
      {
@@ -987,12 +982,12 @@ _epeg_decode(Epeg_Image *im)
 	im->pixels = NULL;
 	return 1;
      }
-	
+
    jpeg_start_decompress(&(im->in.jinfo));
-   
+
    for (y = 0; y < im->in.jinfo.output_height; y++)
      im->lines[y] = im->pixels + (y * im->in.jinfo.output_components * im->in.jinfo.output_width);
-   
+
    while (im->in.jinfo.output_scanline < im->in.jinfo.output_height)
      {
 	if (old_output_scanline == im->in.jinfo.output_scanline)
@@ -1001,13 +996,13 @@ _epeg_decode(Epeg_Image *im)
 	     return 1;
 	  }
 	old_output_scanline = im->in.jinfo.output_scanline;
-	jpeg_read_scanlines(&(im->in.jinfo), 
-			    &(im->lines[im->in.jinfo.output_scanline]), 
+	jpeg_read_scanlines(&(im->in.jinfo),
+			    &(im->lines[im->in.jinfo.output_scanline]),
 			    im->in.jinfo.rec_outbuf_height);
      }
-   
+
    jpeg_finish_decompress(&(im->in.jinfo));
-   
+
    return 0;
 }
 
@@ -1016,12 +1011,12 @@ _epeg_scale(Epeg_Image *im)
 {
    unsigned char *dst, *row, *src;
    int            x, y, w, h, i;
-   
+
    if ((im->in.w == im->out.w) && (im->in.h == im->out.h)) return 0;
    if (im->scaled) return 0;
-   
+
    if ((im->out.w < 1) || (im->out.h < 1)) return 0;
-   
+
    im->scaled = 1;
    w = im->out.w;
    h = im->out.h;
@@ -1029,7 +1024,7 @@ _epeg_scale(Epeg_Image *im)
      {
 	row = im->pixels + (((y * im->in.jinfo.output_height) / h) * im->in.jinfo.output_components * im->in.jinfo.output_width);
 	dst = im->pixels + (y * im->in.jinfo.output_components * im->in.jinfo.output_width);
-	
+
 	for (x = 0; x < im->out.w; x++)
 	  {
 	     src = row + (((x * im->in.jinfo.output_width) / w) * im->in.jinfo.output_components);
@@ -1045,7 +1040,7 @@ static int
 _epeg_decode_for_trim(Epeg_Image *im)
 {
    int		y;
-   
+
    if (im->pixels) return 1;
 
    im->in.jinfo.scale_num           = 1;
@@ -1053,18 +1048,18 @@ _epeg_decode_for_trim(Epeg_Image *im)
    im->in.jinfo.do_fancy_upsampling = FALSE;
    im->in.jinfo.do_block_smoothing  = FALSE;
    im->in.jinfo.dct_method          = JDCT_ISLOW;
-   
+
    switch (im->color_space)
      {
       case EPEG_GRAY8:
 	im->in.jinfo.out_color_space = JCS_GRAYSCALE;
 	im->in.jinfo.output_components = 1;
 	break;
-	
+
       case EPEG_YUV8:
 	im->in.jinfo.out_color_space = JCS_YCbCr;
 	break;
-	
+
       case EPEG_RGB8:
       case EPEG_BGR8:
       case EPEG_RGBA8:
@@ -1072,16 +1067,16 @@ _epeg_decode_for_trim(Epeg_Image *im)
       case EPEG_ARGB32:
 	im->in.jinfo.out_color_space = JCS_RGB;
 	break;
-	
+
       case EPEG_CMYK:
 	im->in.jinfo.out_color_space = JCS_CMYK;
 	im->in.jinfo.output_components = 4;
 	break;
-	
+
       default:
 	break;
      }
-   
+
    im->out.jinfo.err = jpeg_std_error(&(im->jerr.pub));
    im->jerr.pub.error_exit = _epeg_fatal_error_handler;
 #ifdef NOWARNINGS
@@ -1089,7 +1084,7 @@ _epeg_decode_for_trim(Epeg_Image *im)
    im->jerr.pub.output_message = _output_message;
    im->jerr.pub.format_message = _format_message;
 #endif
-   
+
    if (setjmp(im->jerr.setjmp_buffer))
      return 1;
 
@@ -1097,7 +1092,7 @@ _epeg_decode_for_trim(Epeg_Image *im)
 
    im->pixels = malloc(im->in.jinfo.output_width * im->in.jinfo.output_height * im->in.jinfo.output_components);
    if (!im->pixels) return 1;
-   
+
    im->lines = malloc(im->in.jinfo.output_height * sizeof(char *));
    if (!im->lines)
      {
@@ -1105,19 +1100,19 @@ _epeg_decode_for_trim(Epeg_Image *im)
 	im->pixels = NULL;
 	return 1;
      }
-   
+
    jpeg_start_decompress(&(im->in.jinfo));
-   
+
    for (y = 0; y < im->in.jinfo.output_height; y++)
      im->lines[y] = im->pixels + (y * im->in.jinfo.output_components * im->in.jinfo.output_width);
-   
+
    while (im->in.jinfo.output_scanline < im->in.jinfo.output_height)
-     jpeg_read_scanlines(&(im->in.jinfo), 
-			 &(im->lines[im->in.jinfo.output_scanline]), 
+     jpeg_read_scanlines(&(im->in.jinfo),
+			 &(im->lines[im->in.jinfo.output_scanline]),
 			 im->in.jinfo.rec_outbuf_height);
-   
+
    jpeg_finish_decompress(&(im->in.jinfo));
-   
+
    return 0;
 }
 
@@ -1125,19 +1120,19 @@ static int
 _epeg_trim(Epeg_Image *im)
 {
    int            y, a, b, w, h;
-   
+
    if ((im->in.w == im->out.w) && (im->in.h == im->out.h)) return 1;
    if (im->scaled) return 1;
-   
+
    im->scaled = 1;
    w = im->out.w;
    h = im->out.h;
    a = im->out.x;
    b = im->out.y;
-   
+
    for (y = 0; y < h; y++)
      im->lines[y] = im->pixels + ((y+b) * im->in.jinfo.output_components * im->in.jinfo.output_width) + (a * im->in.jinfo.output_components);
-   
+
    return 0;
 }
 
@@ -1148,33 +1143,19 @@ struct epeg_destination_mgr
    unsigned char *buf;
 };
 
-// Name										Value 						Start	Size
-// struct APP1 app1														14h		24h
-// 	enum M_ID marker						M_APP1 (FFE1h)				14h		2h	
-// 	WORD szSection							34							16h		2h	
-// 	char EXIF[6]							Exif						18h		6h	
-// 	byte align[2]							II							1Eh		2h	
-// 	WORD tagMark							42							20h		2h	
-// 	DWORD offsetFirstIFD					8							22h		4h	
-// 	struct IFD ifdMainImage												26h		12h	
-// 		WORD nDirEntry						1							26h		2h	
-// 		struct DIRENTRY dirEntry			Tag# = 0x112 (Orientation)	28h		Ch	
-// 			enum ExifTag tagNumber			Orientation (274)			28h		2h	
-// 			enum DataFormat dataFormat		uShort (3)					2Ah		2h	
-// 			DWORD nComponent				1							2Ch		4h	
-// 			ushort usValue					6							30h		2h	
-// 			uchar padding[2]											32h		2h	
-// 		DWORD nextIFDoffset					0							34h		4h	
-
-static unsigned char exifData[32] = {
-	// Dropped M_ID and section (created by jpeg_write_marker)
-	// Now start with "Exif"
-    0x45, 0x78, 0x69, 0x66,
-    0x00, 0x00, 0x49, 0x49, 0x2A, 0x00, 0x08, 0x00,
-    0x00, 0x00, 0x01, 0x00, 0x12, 0x01, 0x03, 0x00,
-    0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00 
-};
+/* Get an existing tag, or create one if it doesn't exist */
+static ExifEntry *init_tag(ExifData *exif, ExifIfd ifd, ExifTag tag)
+{
+    ExifEntry *entry = exif_content_get_entry (exif->ifd[ifd], tag);
+    if (entry)
+        return entry;
+    entry = exif_entry_new ();
+    if (entry) {
+        exif_content_add_entry (exif->ifd[ifd], entry);
+        exif_entry_initialize (entry, tag);
+    }
+    return entry;
+}
 
 static int
 _epeg_encode(Epeg_Image *im)
@@ -1184,7 +1165,7 @@ _epeg_encode(Epeg_Image *im)
 
    if ((im->out.w < 1) || (im->out.h < 1)) return 1;
    if (im->out.f) return 1;
-   
+
    if (im->out.file)
      {
 	im->out.f = fopen(im->out.file, "wb");
@@ -1196,7 +1177,7 @@ _epeg_encode(Epeg_Image *im)
      }
    else
      im->out.f = NULL;
-   
+
    im->out.jinfo.err = jpeg_std_error(&(im->jerr.pub));
    im->jerr.pub.error_exit = _epeg_fatal_error_handler;
 #ifdef NOWARNINGS
@@ -1204,7 +1185,7 @@ _epeg_encode(Epeg_Image *im)
    im->jerr.pub.output_message = _output_message;
    im->jerr.pub.format_message = _format_message;
 #endif
-   
+
    if (setjmp(im->jerr.setjmp_buffer))
      {
 	ok = 1;
@@ -1241,8 +1222,8 @@ _epeg_encode(Epeg_Image *im)
    im->out.jinfo.in_color_space   = im->in.jinfo.out_color_space;
    im->out.jinfo.dct_method	  = im->in.jinfo.dct_method;
    jpeg_set_defaults(&(im->out.jinfo));
-   jpeg_set_quality(&(im->out.jinfo), im->out.quality, TRUE);   
-   
+   jpeg_set_quality(&(im->out.jinfo), im->out.quality, TRUE);
+
    if (im->out.quality >= 90)
      {
 	im->out.jinfo.comp_info[0].h_samp_factor = 1;
@@ -1254,17 +1235,33 @@ _epeg_encode(Epeg_Image *im)
      }
    jpeg_start_compress(&(im->out.jinfo), TRUE);
 
-   /* Output Exif orientation */
-   exifData[24] = im->in.orientation;
-   jpeg_write_marker(&(im->out.jinfo), JPEG_APP0 + 1, exifData, sizeof(exifData));
+   /* Set the image options for Exif */
+   ExifData *exif = exif_data_new();
+   exif_data_set_option(exif, EXIF_DATA_OPTION_FOLLOW_SPECIFICATION);
+   exif_data_set_byte_order(exif, exif_byte_order);
+   exif_data_fix(exif);
+   /* Add Exif Orientation tag */
+   if (im->in.orientation != 0) {
+        ExifEntry *entry = init_tag(exif, EXIF_IFD_0, EXIF_TAG_ORIENTATION);
+        exif_set_short(entry->data, exif_byte_order, im->in.orientation);
+        exif_entry_unref(entry);
+   }
+   /* Write Exif data to output jpeg file */
+   unsigned char *exif_data;
+   unsigned int exif_data_len;
+   exif_data_save_data(exif, &exif_data, &exif_data_len);
+   jpeg_write_marker(&(im->out.jinfo), JPEG_APP0 + 1, exif_data, exif_data_len);
+   exif_data_unref(exif);
 
-   if (im->out.comment)
+   /* Output comment if there is one */
+   if (im->out.comment && *im->out.comment)
      jpeg_write_marker(&(im->out.jinfo), JPEG_COM, im->out.comment, strlen(im->out.comment));
-   
+
+   /* Output thumbnail info in APP7 */
    if (im->out.thumbnail_info)
      {
 	char buf[8192];
-	
+
 	if (im->in.file)
 	  {
 	     snprintf(buf, sizeof(buf), "Thumb::URI\nfile://%s", im->in.file);
@@ -1279,7 +1276,7 @@ _epeg_encode(Epeg_Image *im)
 	snprintf(buf, sizeof(buf), "Thumb::Mimetype\nimage/jpeg");
 	jpeg_write_marker(&(im->out.jinfo), JPEG_APP0 + 7, buf, strlen(buf));
      }
-   
+
    while (im->out.jinfo.next_scanline < im->out.h)
      jpeg_write_scanlines(&(im->out.jinfo), &(im->lines[im->out.jinfo.next_scanline]), 1);
    jpeg_finish_compress(&(im->out.jinfo));
@@ -1294,18 +1291,18 @@ _epeg_encode(Epeg_Image *im)
 	im->out.jinfo.dest = NULL;
      }
    jpeg_destroy_compress(&(im->out.jinfo));
-   if ((im->out.f) && (im->out.file)) fclose(im->out.f); 
+   if ((im->out.f) && (im->out.file)) fclose(im->out.f);
    im->in.f = NULL;
    im->out.f = NULL;
-   
+
    return ok;
 }
 
-static void 
+static void
 _epeg_fatal_error_handler(j_common_ptr cinfo)
 {
    emptr errmgr;
-   
+
    errmgr = (emptr)cinfo->err;
    longjmp(errmgr->setjmp_buffer, 1);
    return;
@@ -1327,7 +1324,7 @@ METHODDEF(boolean)
 _jpeg_fill_input_buffer(j_decompress_ptr cinfo)
 {
    WARNMS(cinfo, JWRN_JPEG_EOF);
-   
+
    /* Insert a fake EOI marker */
    cinfo->src->next_input_byte = fake_EOI;
    cinfo->src->bytes_in_buffer = sizeof(fake_EOI);
@@ -1340,7 +1337,7 @@ _jpeg_skip_input_data(j_decompress_ptr cinfo, long num_bytes)
 {
    if (num_bytes > (long)(cinfo)->src->bytes_in_buffer)
      ERREXIT(cinfo, 0);
-   
+
    (cinfo)->src->next_input_byte += num_bytes;
    (cinfo)->src->bytes_in_buffer -= num_bytes;
 }
@@ -1356,7 +1353,7 @@ METHODDEF(void)
 _jpeg_init_destination(j_compress_ptr cinfo)
 {
    struct epeg_destination_mgr *dst_mgr;
-   
+
    dst_mgr = (struct epeg_destination_mgr *)cinfo->dest;
    dst_mgr->dst_mgr.free_in_buffer = 65536;
    dst_mgr->dst_mgr.next_output_byte = (JOCTET *)dst_mgr->buf;
@@ -1368,7 +1365,7 @@ _jpeg_empty_output_buffer(j_compress_ptr cinfo)
    struct epeg_destination_mgr *dst_mgr;
    unsigned char *p;
    int psize;
-   
+
    dst_mgr = (struct epeg_destination_mgr *)cinfo->dest;
    psize = *(dst_mgr->im->out.mem.size);
    *(dst_mgr->im->out.mem.size) += 65536;
@@ -1391,7 +1388,7 @@ _jpeg_term_destination(j_compress_ptr cinfo)
    struct epeg_destination_mgr *dst_mgr;
    unsigned char *p;
    int psize;
-   
+
    dst_mgr = (struct epeg_destination_mgr *)cinfo->dest;
    psize = *(dst_mgr->im->out.mem.size);
    *(dst_mgr->im->out.mem.size) += 65536 - dst_mgr->dst_mgr.free_in_buffer;
